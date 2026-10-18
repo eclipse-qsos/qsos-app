@@ -133,3 +133,22 @@ NUXT_OAUTH_GITLAB_CLIENT_SECRET=your-gitlab-client-secret
 # Port where your documentation server is running
 DOCS_SERVER_PORT=3001
 ```
+
+## Contributing
+
+Contributions are made through GitHub pull requests. Before contributing:
+
+- sign the [Eclipse Contributor Agreement (ECA)](https://www.eclipse.org/legal/ECA.php) with the email address you use in your commits;
+- sign off every commit (`git commit -s`).
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+## License
+
+This repository (code) is licensed under the [Apache License 2.0](LICENCE).
+
+The QSOS method itself is published under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+
+## Trademarks
+
+Eclipse QSOS and the QSOS logo are trademarks of Eclipse Foundation AISBL.
