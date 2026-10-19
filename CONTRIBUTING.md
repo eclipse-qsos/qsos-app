@@ -54,6 +54,31 @@ before starting any significant work and apply the most appropriate label.
 Once the work is complete, submit your contribution through a GitHub pull
 request that references the related issue.
 
+## AI Contribution Policy
+
+This project follows the Human Voice AI contribution policy: AI tools may help
+you, but they must never speak or think for you. Please read it before
+contributing.
+
+* [AI_POLICY.md](AI_POLICY.md)
+
+Committers must also follow the Eclipse Foundation Generative Artificial
+Intelligence Usage Guidelines.
+
+* https://www.eclipse.org/projects/handbook/#genai
+
+When an AI assistant contributed to a commit, disclose it with an
+`Assisted-by:` trailer in the commit message, as recommended by the Eclipse
+Project Handbook. Use `Assisted-by:` rather than `Co-Authored-By:`.
+
+    Assisted-by: [Provider]
+
+For example:
+
+    Assisted-by: Claude code
+
+* https://www.eclipse.org/projects/handbook/#genai-assisted-by
+
 ## Eclipse Foundation Development Process
 
 This Eclipse Foundation open project is governed by the Eclipse Foundation
