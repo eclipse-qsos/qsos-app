@@ -22,7 +22,7 @@
     "header": {
         "types_of_software": "Types of software",
         "evaluate_software": "Evaluate a software",
-        "compare_softwares": "Compare softwares",
+        "compare_softwares": "Compare software",
         "requirements_presets": "Requirements presets",
         "import_legacy": "Import legacy",
         "login": "Login"
@@ -52,7 +52,7 @@
         "section_qualify": "Qualify",
         "requirements_presets": "Requirements presets",
         "section_select": "Select",
-        "compare_softwares": "Compare Softwares"
+        "compare_softwares": "Compare Software"
     },
     "preset_save": {
         "changed_name": "You've changed the preset name. This will be saved as a new preset.",
