@@ -38,6 +38,7 @@ import log from "loglevel";
 import { rimraf } from 'rimraf';
 import { QSOS_VERSIONS } from "../qsos-versions/qsos-versions";
 import { compareSemver } from "../../../utils/semver";
+import { assertSafeSegment, InvalidDataPathError } from "./safe-path";
 
 const toJSON = (data: object) => JSON.stringify(data, null, "\t");
 
@@ -57,8 +58,18 @@ export class FileBasedProvider implements DataProvider {
         }
     }
 
+    /**
+     * Build a path inside the data folder. Every segment usually comes from a
+     * request (route params, body, stored file names), so each one is
+     * validated to prevent path traversal and stray folders such as ":type()".
+     */
     getDataPath(...args: string[]) {
-        return path.join(this.dataPath, ...args)
+        args.forEach(assertSafeSegment)
+        const fullPath = path.join(this.dataPath, ...args)
+        if (fullPath !== this.dataPath && !fullPath.startsWith(this.dataPath + path.sep)) {
+            throw new InvalidDataPathError(args.join("/"))
+        }
+        return fullPath
     }
 
     private isMaturityGrid(sections?: any[]): boolean {
@@ -77,16 +88,28 @@ export class FileBasedProvider implements DataProvider {
         Software types
        ======================== */
 
-    getSoftwareTypeFile(type: string) {
-        return this.fs.readJSON<SoftwareType>(this.getDataPath("software-types", type, `${type}.json`))
+    async getSoftwareTypeFile(type: string) {
+        try {
+            return await this.fs.readJSON<SoftwareType>(this.getDataPath("software-types", type, `${type}.json`))
+        } catch (err: any) {
+            // Unknown software type: answer 404 instead of 500 (h3 reads statusCode)
+            if (err?.code === "ENOENT") err.statusCode = 404
+            throw err
+        }
     }
 
     async getSoftwareTypes(): Promise<SoftwareType[]> {
         const dirContent = await this.fs.readFolder(this.getDataPath("software-types"))
         const paths = dirContent.filter((dir) => dir.isDirectory());
-        return Promise.all(
+        // One broken or foreign folder must not take the whole list down
+        const results = await Promise.allSettled(
             paths.map(async (dir) => this.getSoftwareType(dir.name))
         )
+        return results.flatMap((result, i) => {
+            if (result.status === "fulfilled") return [result.value]
+            console.warn(`Skipping invalid software type folder "${paths[i]?.name}":`, result.reason?.message ?? result.reason)
+            return []
+        })
     }
 
     async getSoftwareType(type: string): Promise<SoftwareType> {
@@ -214,7 +237,6 @@ export class FileBasedProvider implements DataProvider {
 
     async pushSoftware(software: Software, previousType?: string, previousUid?: string): Promise<Software> {
         const newType = software.type.uid;
-        const parent = this.getDataPath("software-types", newType, "softwares")
         if (previousType && previousType !== newType) {
             log.info(`Software type has changed, moving folder from ${previousType} to ${newType}`);
             await this.fs.moveFolder(
@@ -224,8 +246,11 @@ export class FileBasedProvider implements DataProvider {
         }
         else if (previousUid && previousUid !== software.uid) {
             log.info(`Software name has changed, renaming folder ${previousUid} into ${software.uid}`)
-            await this.fs.deleteFile(path.join(parent, previousUid, `${previousUid}.json`))
-            await this.fs.moveFolder(path.join(parent, previousUid), path.join(parent, software.uid))
+            await this.fs.deleteFile(this.getDataPath("software-types", newType, "softwares", previousUid, `${previousUid}.json`))
+            await this.fs.moveFolder(
+                this.getDataPath("software-types", newType, "softwares", previousUid),
+                this.getDataPath("software-types", newType, "softwares", software.uid)
+            )
         }
 
         const creatorEmail = (software.creatorEmail || (software as any)?.author?.email || "").trim()
@@ -253,7 +278,7 @@ export class FileBasedProvider implements DataProvider {
                 try {
                     const processedImg = await processIconBase64(imgData, 48, 48)
                     const fileName = `icon.${extension}`
-                    const iconPath = path.join(parent, software.uid, fileName)
+                    const iconPath = this.getDataPath("software-types", newType, "softwares", software.uid, fileName)
                     await this.fs.writeFile(iconPath, processedImg)
                     software.icon = fileName
                     softwareFileData.icon = fileName
@@ -382,10 +407,8 @@ export class FileBasedProvider implements DataProvider {
         type: string,
     ): Promise<EvaluationGrid[]> {
         const gridsPath = this.getDataPath("software-types", type, "grids")
-        // ensure folder exists, make it if not
-        if (!await this.fs.fileExists(gridsPath)) {
-            await this.fs.makeFolder(gridsPath)
-        }
+        // Read-only: a missing grids folder simply means no grids (readFolder returns []).
+        // Never create folders here, as this is reachable by anonymous GET requests.
         const dirContent = await this.fs.readFolder(gridsPath);
         const paths = dirContent.filter((file) => file && file.isFile() && file.name.endsWith(".json"));
         return Promise.all([
@@ -465,6 +488,11 @@ export class FileBasedProvider implements DataProvider {
     }
 
     async getEvaluations(type: string, softwareUid: string, softwareVersion = "*", gridVersion = "*"): Promise<EvaluationListItem[]> {
+        // These segments end up in a glob pattern: only the "*" wildcard defaults are allowed
+        assertSafeSegment(type)
+        assertSafeSegment(softwareUid)
+        if (softwareVersion !== "*") assertSafeSegment(softwareVersion)
+        if (gridVersion !== "*") assertSafeSegment(gridVersion)
         const evaluationsPath = path.join("software-types", type, "softwares", softwareUid, softwareVersion, "evaluations", gridVersion, "*.json")
         const paths = await this.fs.glob(evaluationsPath, this.dataPath)
         //log.debug("Searching for evaluations", evaluationsPath, "Found evaluations", paths)

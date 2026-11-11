@@ -53,15 +53,10 @@ export default defineNuxtConfig({
     }
   },
   runtimeConfig: {
+    // OAuth credentials are read server-side by nuxt-auth-utils from the
+    // NUXT_OAUTH_{GITHUB,GITLAB}_CLIENT_{ID,SECRET} environment variables.
+    // Never put them under `public`: that is shipped to every browser.
     public: {
-      github: {
-        clientId: process.env.NUXT_OAUTH_GITHUB_CLIENT_ID,
-        clientSecret: process.env.NUXT_OAUTH_GITHUB_CLIENT_SECRET
-      },
-      gitlab: {
-        clientId: process.env.NUXT_OAUTH_GITLAB_CLIENT_ID,
-        clientSecret: process.env.NUXT_OAUTH_GITLAB_CLIENT_SECRET
-      },
       docsServerPort: process.env.DOCS_SERVER_PORT || '3001'
     },
     sessionPassword: process.env.NUXT_SESSION_PASSWORD,
