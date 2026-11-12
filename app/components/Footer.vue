@@ -22,9 +22,9 @@
     <a>
       <Icon name="uil:github" /> {{ $t('footer.github') }}
     </a>
-    <a>
-      <Icon name="uil:share-alt" />
-      {{ $t('footer.social') }}
+    <a href="https://chat.eclipse.org/#/room/#qsos:matrix.eclipse.org" target="_blank" rel="noopener">
+      <Icon name="uil:comments" />
+      {{ $t('footer.chat') }}
     </a>
   </footer>
 </template>
