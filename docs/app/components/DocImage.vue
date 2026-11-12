@@ -13,14 +13,14 @@
 <template>
   <figure class="doc-figure">
     <div class="doc-image-container" :style="{ maxWidth: maxWidth }">
-      <img :src="src" :alt="alt" :style="{ maxWidth: maxWidth }" />
+      <img :src="resolvedSrc" :alt="alt" :style="{ maxWidth: maxWidth }" />
     </div>
     <figcaption v-if="caption">{{ caption }}</figcaption>
   </figure>
 </template>
 
 <script setup>
-defineProps({
+const props = defineProps({
   src: {
     type: String,
     required: true
@@ -37,6 +37,16 @@ defineProps({
     type: String,
     default: '350px'
   }
+})
+
+// The docs site is served under app.baseURL (e.g. /docs/): prefix absolute
+// paths such as /images/... so they resolve to the docs' public folder.
+const { baseURL } = useRuntimeConfig().app
+const resolvedSrc = computed(() => {
+  const src = props.src
+  if (!src.startsWith('/') || src.startsWith('//')) return src
+  const base = baseURL.replace(/\/$/, '')
+  return src.startsWith(`${base}/`) ? src : `${base}${src}`
 })
 </script>
 
