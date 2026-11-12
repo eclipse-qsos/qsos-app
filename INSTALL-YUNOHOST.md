@@ -2,10 +2,13 @@
 
 This guide explains how to deploy the QSOS web application on a VPS running [YunoHost](https://yunohost.org), exposed on its own subdomain (for example `app.qsos.org`) with a Let's Encrypt certificate.
 
-The app is a Nuxt 4 server-rendered application. It builds into a standalone Node.js server (`.output/server/index.mjs`) and keeps its content as JSON files in a `data/` folder next to where it is started. YunoHost handles the domain, the HTTPS certificate and the nginx reverse proxy. The app itself runs as a systemd service.
+The app is a Nuxt 4 server-rendered application, and its documentation is a second Nuxt app served under `/docs`. The main app builds into a standalone Node.js server (`.output/server/index.mjs`) and keeps its content as JSON files in a `data/` folder next to where it is started. YunoHost handles the domain, the HTTPS certificate and the nginx reverse proxy. Each app runs as its own systemd service.
 
 ```
-Browser ──HTTPS──▶ YunoHost nginx (app.qsos.org) ──HTTP──▶ 127.0.0.1:3080 (Node / QSOS)
+Browser ──HTTPS──▶ YunoHost nginx (app.qsos.org) ──HTTP──▶ 127.0.0.1:3080 (QSOS app)
+                                                                │ /docs/**
+                                                                ▼
+                                                           127.0.0.1:3001 (QSOS docs)
 ```
 
 Throughout this guide, replace:
@@ -109,7 +112,7 @@ node -v && npm -v
 
 ```bash
 mkdir -p /home/<user>/dev
-git clone https://github.com/qsos-org/qsos.git /home/<user>/dev/qsos-app
+git clone https://github.com/eclipse-qsos/qsos-app.git /home/<user>/dev/qsos-app
 cd /home/<user>/dev/qsos-app
 ```
 
@@ -127,7 +130,7 @@ chmod 600 .env
 | `NUXT_SESSION_PASSWORD` | Secret of at least 32 characters used to encrypt session cookies |
 | `NUXT_OAUTH_GITHUB_CLIENT_ID` / `_SECRET` | GitHub OAuth app credentials (see [step 11](#11-register-the-oauth-applications)) |
 | `NUXT_OAUTH_GITLAB_CLIENT_ID` / `_SECRET` | GitLab OAuth app credentials |
-| `DOCS_SERVER_PORT` | Port of the optional documentation server (default `3001`) |
+| `DOCS_SERVER_PORT` | Port of the documentation server the app forwards `/docs` to (default `3001`, see [step 12](#12-the-documentation-site-docs)) |
 
 The app runs without the OAuth values (login is simply unavailable), so you can fill them in later.
 
@@ -140,6 +143,12 @@ The app runs without the OAuth values (login is simply unavailable), so you can 
 ```bash
 # run from the machine that has the data
 rsync -avz ./data/ <user>@<vps>:/home/<user>/dev/qsos-app/data/
+```
+
+If the data came from Windows (or WSL), remove the `*:Zone.Identifier` files Windows attaches to downloaded files:
+
+```bash
+find /home/<user>/dev/qsos-app/data -name '*:Zone.Identifier' -delete
 ```
 
 or start empty. The app creates `data/` on first start, and you can fetch the SPDX license list with:
@@ -258,9 +267,13 @@ A practical path:
    - **Transfer:** in the GitHub OAuth app settings use **Transfer ownership**. An organization owner may need to approve it. The client ID is kept; generate a new secret afterwards, update `.env`, rebuild and restart.
    - **Recreate:** an organization owner creates a new app with the same callback URL. Put the new credentials in `.env`, rebuild and restart. Users only see the consent screen again at their next login, and their data in the app is not affected.
 
-## 12. Optional: the documentation site (`/docs`)
+## 12. The documentation site (`/docs`)
 
-The main app forwards `/docs` to a separate Docus site on `DOCS_SERVER_PORT` (default `3001`). To serve it:
+The documentation is a separate Nuxt (Docus) app in the `docs/` folder, served under the `/docs/` base path. The main app forwards every `https://app.qsos.org/docs/...` request to it on `127.0.0.1:DOCS_SERVER_PORT` (default `3001`), so **no YunoHost change is needed**. The existing Redirect app already covers `/docs`.
+
+Without this service, `/docs` returns an error and the rest of the app works normally.
+
+### Build
 
 ```bash
 cd /home/<user>/dev/qsos-app/docs
@@ -268,17 +281,76 @@ npm ci
 npm run build
 ```
 
-Then create a second service (for example `qsos-docs.service`) identical to the one in step 9, but with `WorkingDirectory=/home/<user>/dev/qsos-app/docs` and `PORT=3001`. Without it, `/docs` returns a gateway error and the rest of the app works normally.
+`better-sqlite3` is compiled during `npm ci`, which needs the packages from [step 3](#3-install-the-system-dependencies). The build prints `[@nuxt/robots] ERROR You are not allowed to generate a robots.txt with a base URL`. This is harmless, and the build still succeeds.
+
+### Port
+
+Check that the port is free (this command should print nothing):
+
+```bash
+sudo ss -ltnp | grep :3001
+```
+
+If `3001` is taken, choose another port, set `DOCS_SERVER_PORT=<port>` in the **main app's** `.env`, then rebuild and restart the main app. It reads this value at build time:
+
+```bash
+cd /home/<user>/dev/qsos-app && npm run build && sudo systemctl restart qsos
+```
+
+### Service
+
+Create `/etc/systemd/system/qsos-docs.service`:
+
+```ini
+[Unit]
+Description=QSOS documentation
+After=network.target
+
+[Service]
+User=<user>
+WorkingDirectory=/home/<user>/dev/qsos-app/docs
+Environment=NODE_ENV=production HOST=127.0.0.1 PORT=3001
+Environment=PATH=/opt/node22/bin:/usr/bin:/bin
+ExecStart=/opt/node22/bin/node .output/server/index.mjs
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Start it and check it, first directly, then through the app:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now qsos-docs
+curl -sI http://127.0.0.1:3001/docs/ | head -1   # HTTP/1.1 200
+```
+
+Then open `https://app.qsos.org/docs/`. The documentation is available in English (`/docs/en/...`) and French (`/docs/fr/...`), and the app's About page links to it in the current language.
+
+> In the docs content, reference images from `docs/public/` with absolute paths such as `/images/...`. The `DocImage` component adds the `/docs` base path automatically.
 
 ## 13. Updating
+
+The app and the documentation live in the same repository. Update and rebuild both:
 
 ```bash
 cd /home/<user>/dev/qsos-app
 git pull
+
+# main app
 npm ci
 npm run build
 sudo systemctl restart qsos
+
+# documentation site
+cd docs
+npm ci
+npm run build
+sudo systemctl restart qsos-docs
 ```
+
+Your `data/` folder and `.env` are not tracked by git, so `git pull` leaves them untouched.
 
 ## 14. Backups
 
@@ -301,9 +373,14 @@ Keep a copy off the server as well.
 | OAuth error "redirect_uri mismatch" | The callback URL in the provider settings is exactly `https://app.qsos.org/auth/<provider>` |
 | Changes to `.env` are ignored | Rebuild (`npm run build`) and restart the service |
 | Build killed / out of memory | Add swap or set `NODE_OPTIONS=--max-old-space-size=2048` |
+| A software type is missing from the list | Folders in `data/software-types/` without a matching `<name>/<name>.json` are skipped, and a warning appears in the logs. Fix or remove the folder |
+| API answers `400 Invalid identifier` | The request used a name with forbidden characters (`/`, `\`, `:`, `..`, a leading `.`, wildcards). This is expected protection against path traversal |
+| Error on `https://app.qsos.org/docs/` | `systemctl status qsos-docs`, `curl -I http://127.0.0.1:3001/docs/`, the main app's `DOCS_SERVER_PORT` matches the docs service's `PORT` (rebuild the main app after changing it) |
+| Docs pages load but images are broken | Images must live in `docs/public/` and be referenced as `/images/...` through the `DocImage` component. Rebuild the docs after adding them |
 
 Logs:
 
 ```bash
-journalctl -u qsos -f
+journalctl -u qsos -f        # main app
+journalctl -u qsos-docs -f   # documentation site
 ```
