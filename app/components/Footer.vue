@@ -19,7 +19,7 @@
     <!--<a href="/docs/en/" target="_blank" rel="noopener">
       <Icon name="uil:book" /> {{ $t('footer.documentation') }}
     </a>-->
-    <a>
+    <a href="https://github.com/eclipse-qsos/qsos-app" target="_blank" rel="noopener">
       <Icon name="uil:github" /> {{ $t('footer.github') }}
     </a>
     <a href="https://chat.eclipse.org/#/room/#qsos:matrix.eclipse.org" target="_blank" rel="noopener">
