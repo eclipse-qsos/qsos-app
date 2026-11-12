@@ -20,24 +20,20 @@
     <h1>{{ $t('about.title') }}</h1>
     <p>{{ $t('about.tool_description') }}</p>
     <p>
-      <a :href="docsUrl + '/en/methodology/qsos-manifesto'" target="_blank">
+      <a :href="`${docsUrl}/methodology/qsos-manifesto`" target="_blank">
         {{ $t('about.read_manifesto') }}
       </a>
     </p>
     <p>
-      <a :href="docsUrl + '/en/methodology/introduction'" target="_blank">
+      <a :href="`${docsUrl}/methodology/introduction`" target="_blank">
         {{ $t('about.read_docs') }}
       </a>
     </p>
   </div>
 </template>
-<script>
-export default {
-  name: 'AboutPage',
-  data() {
-    return {
-      docsUrl: 'http://localhost:3000/docs'
-    }
-  }
-}
+<script setup lang="ts">
+// The documentation site is served by the same host under /docs
+// (proxied to the docs server), in the current UI language.
+const { locale } = useI18n()
+const docsUrl = computed(() => `/docs/${locale.value === 'fr' ? 'fr' : 'en'}`)
 </script>
